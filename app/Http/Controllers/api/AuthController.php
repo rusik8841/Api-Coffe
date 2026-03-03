@@ -36,7 +36,6 @@ class AuthController extends Controller
             ...$request->validated(),
             'role_id' => $role->id,
         ]);
-        // Создание токена
         $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([

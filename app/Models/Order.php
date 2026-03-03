@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Order extends Model
 {
@@ -23,7 +24,7 @@ class Order extends Model
         return $this->belongsTo(ShiftWorker::class, 'shift_worker_id');
     }
 
-    public function status()
+    public function status(): BelongsTo
     {
         return $this->belongsTo(StatusOrder::class, 'status_order_id');
     }

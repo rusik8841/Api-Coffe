@@ -8,15 +8,20 @@ use App\Http\Requests\Api\AdminRequest;
 use App\Http\Requests\Api\Work\OpenAndCloseRequest;
 use App\Http\Requests\Api\Work\UserWorkRequest;
 use App\Http\Requests\Api\Work\WorkShiftRequest;
+use App\Models\Order;
+use App\Models\StatusOrder;
+use App\Models\OrderMenu;
 use App\Models\Role;
 use App\Models\ShiftWorker;
+use App\Models\Table;
 use App\Models\User;
 use App\Models\WorkShift;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
 {
-    public function index(AdminRequest $request) {
+    public function index() {
         $users = User::all();
         return response()->json($users, 200);
     }
@@ -140,5 +145,89 @@ class AdminController extends Controller
                 'status'  => 'added'
             ]
         ]);
+    }
+
+    public function show($id)
+    {
+        $user = User::findOrFail($id);
+        return response()->json($user, 200);
+
+    }
+
+    public function toDismiss( $id)
+    {
+        $user = User::findOrFail($id);
+        $user->delete();
+        return response()->json(['message' => 'User delete'], 200);
+    }
+
+    public function workShift()
+    {
+        $workShift = WorkShift::all();
+        return response()->json($workShift, 200);
+
+    }
+
+    public function destroyUserWork($work, $user)
+    {
+        $workShift = WorkShift::findOrFail($work);
+        $user = User::findOrFail($user);
+
+        $deleted = ShiftWorker::where('work_shift_id', $workShift->id)
+            ->where('user_id', $user->id)
+            ->delete();
+
+        if ($deleted === 0) {
+            return response()->json([
+                'message' => 'User not found in this work shift'
+            ], 404);
+        }
+        return response()->json([
+            'message' => 'User successfully removed from work shift'
+        ], 200);
+
+    }
+
+    public function orderWork(string $id)
+    {
+        $workShift = WorkShift::findOrFail($id);
+
+        $shiftWorkerIds = ShiftWorker::where('work_shift_id', $id)->pluck('id');
+
+        $orders = Order::whereIn('shift_worker_id', $shiftWorkerIds)->get();
+
+        $ordersData = $orders->map(function($order) {
+            $status = StatusOrder::find($order->status_order_id);
+
+            $table = Table::find($order->table_id);
+
+            $shiftWorker = ShiftWorker::with('user')->find($order->shift_worker_id);
+
+            $price = OrderMenu::where('order_id', $order->id)
+                ->join('menus', 'order_menus.menu_id', '=', 'menus.id')
+                ->sum(\DB::raw('menus.price * order_menus.count'));
+
+            return [
+                'id' => $order->id,
+                'table' => $table ? $table->name : 'Unknown',
+                'shift_workers' => $shiftWorker && $shiftWorker->user ? $shiftWorker->user->name : 'Unknown',
+                'create_at' => $order->created_at,
+                'status' => $status ? $status->name : 'Unknown',
+                'price' => round($price, 2)
+            ];
+        });
+
+        $amountForAll = $ordersData->sum('price');
+
+        return response()->json([
+            'data' => [
+                'id' => $workShift->id,
+                'start' => $workShift->start,
+                'end' => $workShift->end,
+                'active' => (int)$workShift->active,
+                'orders' => $ordersData,
+                'amount_for_all' => round($amountForAll, 2)
+            ]
+        ], 200);
     }
 }
